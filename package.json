@@ -43,6 +43,7 @@
     "@types/react": "^18.2.38",
     "@types/react-router-dom": "^4.2.6",
     "@types/superagent": "^3.5.8",
+    "colyseus": "^0.15.13",
     "css-loader": "^0.28.11",
     "extract-text-webpack-plugin": "^4.0.0-beta.0",
     "file-loader": "^1.1.11",
