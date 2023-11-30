@@ -2,14 +2,18 @@ import * as React from "react";
 
 import { fetchRoomData, fetchRoomList, remoteRoomCall } from "../services";
 
-import { Card, Button, Typography, Autocomplete, TextField } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 
 import {
-  Fab,
+  Card,
+  Button,
+  Autocomplete,
+  TextField,
+  Chip,
   Table,
+  Typography,
   TableCell,
   TableContainer,
   TableHead,
@@ -18,6 +22,7 @@ import {
 } from '@mui/material';
 
 const UPDATE_ROOM_LIST_INTERVAL = 5000;
+const NO_ACTIVE_ROOMS_ROOM_ID = 'No active rooms.';
 
 interface IRoomListState {
   selected: Array<number>,
@@ -132,6 +137,10 @@ export class RoomList extends React.Component {
   }
 
   millisecondsToStr(milliseconds) {
+    if (milliseconds < 0) {
+      return "";
+    }
+
     let temp = Math.floor(milliseconds / 1000);
 
     const years = Math.floor(temp / 31536000);
@@ -175,43 +184,49 @@ export class RoomList extends React.Component {
     data.push({
       id: "Inspect",
       field: "Inspect",
-      headerName: "Inspect",
+      headerName: "", // Inspect
       flex: 1,
       renderCell: (param) => {
-        return <div style={{ cursor: "pointer" }} onClick={() => {
-          this.inspectRoom(param.value);
-        }}>
-          <Button variant="contained" startIcon={<OpenInBrowserIcon />}>
-            <Typography
-              noWrap
-              component="div"
-              sx={{ flexGrow: 1, display: { xs: 'none', sm: 'none', md: "block" } }}
-            >
-              INSPECT
-            </Typography>
-          </Button>
-        </div>
+        return (param.value !== NO_ACTIVE_ROOMS_ROOM_ID)
+          ? <div style={{ cursor: "pointer" }} onClick={() => {
+              this.inspectRoom(param.value);
+            }}>
+              {/* TODO: use IconButton on sm/xs devices */}
+              <Button variant="contained" disableElevation startIcon={<OpenInBrowserIcon />}>
+                  <Typography
+                    noWrap
+                    component="span"
+                    sx={{ flexGrow: 1, display: { xs: 'none', sm: 'none', md: "block" } }}
+                  >
+                      Inspect
+                  </Typography>
+              </Button>
+            </div>
+          : null;
       }
     });
     data.push({
       id: "Dispose",
       field: "Dispose",
-      headerName: "Dispose",
+      headerName: "", // Dispose
       flex: 1,
       renderCell: (param) => {
-        return <div style={{ cursor: "pointer" }} onClick={() => {
-          this.disposeRoom(param.value);
-        }}>
-          <Button variant="contained" color="error" startIcon={<DeleteForeverIcon />}>
-            <Typography
-              noWrap
-              component="div"
-              sx={{ flexGrow: 1, display: { xs: 'none', sm: 'none', md: "block" } }}
-            >
-              DISPOSE
-            </Typography>
-          </Button>
-        </div>
+        return (param.value !== NO_ACTIVE_ROOMS_ROOM_ID)
+          ? <div style={{ cursor: "pointer" }} onClick={() => {
+              this.disposeRoom(param.value);
+            }}>
+              {/* TODO: use IconButton on sm/xs devices */}
+              <Button variant="contained" disableElevation color="error" startIcon={<DeleteForeverIcon />}>
+                  <Typography
+                    noWrap
+                    component="span"
+                    sx={{ flexGrow: 1, display: { xs: 'none', sm: 'none', md: "block" } }}
+                  >
+                      Dispose
+                  </Typography>
+              </Button>
+            </div>
+          : null;
       }
     });
     return data;
@@ -331,7 +346,11 @@ export class RoomList extends React.Component {
       }
       <DataGrid
         columns={columns}
-        rows={rows}
+        rows={
+          (rows.length === 0)
+            ? this.computeRowsData([{ roomId: NO_ACTIVE_ROOMS_ROOM_ID, elapsedTime: -1 }])
+            : rows
+        }
         autoHeight
         sx={{ overflow: "hidden" }}
         slots={{
@@ -356,27 +375,19 @@ export class RoomList extends React.Component {
                 <TableRow>
                   <TableCell align={"center"}>
                     Connections
-                    <Fab sx={{ marginLeft: "6px" }} variant="extended" size="small" color="primary" aria-label="add">
-                      {this.state.connections}
-                    </Fab>
+                    <Chip sx={{ marginLeft: "6px" }} size="small" color="primary" label={this.state.connections} />
                   </TableCell>
                   <TableCell align={"center"}>
                     Rooms
-                    <Fab sx={{ marginLeft: "6px" }} variant="extended" size="small" color="primary" aria-label="add">
-                      {this.state.rooms.length}
-                    </Fab>
+                    <Chip sx={{ marginLeft: "6px" }} size="small" color="primary" label={this.state.rooms.length} />
                   </TableCell>
                   <TableCell align={"center"}>
                     CPU Usage
-                    <Fab sx={{ marginLeft: "6px" }} variant="extended" size="small" color="primary" aria-label="add">
-                      {this.state.cpu} %
-                    </Fab>
+                    <Chip sx={{ marginLeft: "6px" }} size="small" color="primary" label={`${this.state.cpu} %`} />
                   </TableCell>
                   <TableCell align={"center"}>
                     Memory
-                    <Fab sx={{ marginLeft: "6px" }} variant="extended" size="small" color="primary" aria-label="add">
-                      {this.state.memory.usedMemMb} MB
-                    </Fab>
+                    <Chip sx={{ marginLeft: "6px" }} size="small" color="primary" label={`${this.state.memory.usedMemMb} MB`} />
                   </TableCell>
                 </TableRow>
               </TableHead>
