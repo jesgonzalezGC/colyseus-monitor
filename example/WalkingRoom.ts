@@ -1,33 +1,29 @@
 import { Room, Client } from "colyseus";
-import { InputData, MyRoomState, Player } from "./schema/TestState";
+import { WalkingState, Player } from "./schema/TestState";
 
-export class MyRoom extends Room<MyRoomState> {
+export class WalkingRoom extends Room<WalkingState> {
   fixedTimeStep = 1000 / 60;
 
   players: { [sessionId: string]: any } = {};
 
   onCreate(options: any) {
-    this.setState(new MyRoomState());
-    this.maxClients = 2;
-    // set map dimensions
-    this.state.mapWidth = 800;
-    this.state.mapHeight = 600;
+    this.setState(new WalkingState());
+    this.maxClients = 2;;
 
     this.onMessage(0, (client, input) => {
       // handle player input
       const player = this.state.players.get(client.sessionId);
-
-      // enqueue input to user input buffer.
-      player.inputQueue.push(input);
+      if (!player) {
+        return;
+      }
     });
 
     this.onMessage("hello", (client, input) => {
       // handle player input
       const player = this.state.players.get(client.sessionId);
-      player.x = Number(input);
-
-      // enqueue input to user input buffer.
-      player.inputQueue.push(input);
+      if (!player) {
+        return;
+      }
     });
   }
 
@@ -40,8 +36,6 @@ export class MyRoom extends Room<MyRoomState> {
     }
 
     const player = new Player();
-    player.x = Math.random() * this.state.mapWidth;
-    player.y = Math.random() * this.state.mapHeight;
     player.global_id = options.global_id;
 
     this.state.players.set(client.sessionId, player);
@@ -54,14 +48,6 @@ export class MyRoom extends Room<MyRoomState> {
 
   onCacheRoom() {
     return { hello: true };
-  }
-
-  onRestoreRoom(cached: any): void {
-    console.log("ROOM HAS BEEN RESTORED!", cached);
-
-    this.state.players.forEach(player => {
-      player.method();
-    });
   }
 
   onDispose() {
