@@ -8,7 +8,7 @@ export class WalkingRoom extends Room<WalkingState> {
 
   onCreate(options: any) {
     this.setState(new WalkingState());
-    this.maxClients = 2;;
+    this.maxClients = 20;
 
     this.onMessage(0, (client, input) => {
       // handle player input
