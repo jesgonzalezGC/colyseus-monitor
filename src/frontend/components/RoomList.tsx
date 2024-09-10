@@ -1,16 +1,13 @@
 import * as React from "react";
+import type { MonitorOptions } from "../../";
+import { fetchRoomList, remoteRoomCall } from "../services";
 
-import { fetchRoomData, fetchRoomList, remoteRoomCall } from "../services";
-
-import { DataGrid } from '@mui/x-data-grid';
+import { Card, Button, mobileStepperClasses, getModalUtilityClass } from '@mui/material';
+import { DataGrid, GridColDef, gridDateComparator, gridNumberComparator, gridStringOrNumberComparator } from '@mui/x-data-grid';
 import OpenInBrowserIcon from '@mui/icons-material/OpenInBrowser';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 
 import {
-  Card,
-  Button,
-  Autocomplete,
-  TextField,
   Chip,
   Table,
   Typography,
@@ -24,36 +21,45 @@ import {
 const UPDATE_ROOM_LIST_INTERVAL = 5000;
 const NO_ACTIVE_ROOMS_ROOM_ID = 'No active rooms.';
 
-interface IRoomListState {
-  selected: Array<number>,
-  rooms: Array<any>,
-  rooms_schemas: Map<string, any>,
-  connections: number,
-  cpu: number,
-  memory: {
-    totalMemMb: number,
-    usedMemMb: number
-  },
-  columns: Array<any>,
-  find_options: {
-    room_type: string | null,
-    global_id: string
+/**
+ * Define default sort method by column name
+ */
+type ExtractStringNames<T> = T extends (infer U)[] ? U extends string ? U : never : never;
+const sortComparator: { [key in ExtractStringNames<MonitorOptions['columns']>]?: Function } = {
+  clients: gridNumberComparator,
+  maxClients: gridNumberComparator,
+  elapsedTime: gridDateComparator
+}
+
+const valueFormatter: { [key in ExtractStringNames<MonitorOptions['columns']>]?: Function } = {
+  elapsedTime: (params) => {
+    const elapsedTime = params.value.getTime && params.value.getTime();
+    if (!elapsedTime) { return ""; }
+    const milliseconds = Date.now() - elapsedTime;
+    if (milliseconds < 0) { return ""; }
+    let temp = Math.floor(milliseconds / 1000);
+    const years = Math.floor(temp / 31536000);
+    if (years) { return years + 'y'; }
+    const days = Math.floor((temp %= 31536000) / 86400);
+    if (days) { return days + 'd'; }
+    const hours = Math.floor((temp %= 86400) / 3600);
+    if (hours) { return hours + 'h'; }
+    const minutes = Math.floor((temp %= 3600) / 60);
+    if (minutes) { return minutes + 'min'; }
+    const seconds = temp % 60;
+    if (seconds) { return seconds + 's'; }
+    return 'less than a second';
   }
 }
 
 export class RoomList extends React.Component {
-  state: IRoomListState = {
+  state = {
     selected: [1],
     rooms: [],
-    rooms_schemas: new Map<string,any>(),
     connections: 0,
     cpu: 0,
     memory: { totalMemMb: 0, usedMemMb: 0 },
     columns: [],
-    find_options: {
-      room_type: null,
-      global_id: ""
-    }
   };
 
   updateRoomListInterval: number;
@@ -68,18 +74,8 @@ export class RoomList extends React.Component {
 
   async fetchRoomList () {
     try {
-      const new_room_data = new Map<string, any>();
-      const data = await fetchRoomList();
-      for(const room of data.body.rooms){
-        if(this.state.find_options.global_id && this.state.find_options.room_type == room.name){
-          const room_full_data = await fetchRoomData(room.roomId);
-          new_room_data.set(room.roomId, room_full_data.body);
-        }
-      }
-      this.setState(data.body);
-      this.setState({
-        rooms_schemas: new_room_data
-      });
+      this.setState((await fetchRoomList()).body);
+
     } catch (err) {
       console.error(err)
     }
@@ -117,10 +113,10 @@ export class RoomList extends React.Component {
     let value: any;
     let valueFromObject: any = room;
 
-    let postProcessValue: false | ((_: any) => string) = false;
+    let postProcessValue: any = undefined;
 
-    if (field === "elapsedTime") {
-      postProcessValue = this.millisecondsToStr;
+    if (field === "elapsedTime" && valueFromObject[field] >= 0) {
+      postProcessValue = (milliseconds) => new Date( Date.now() - milliseconds );
 
     } else if (column.metadata && room.metadata) {
       field = column.metadata;
@@ -133,42 +129,7 @@ export class RoomList extends React.Component {
       value = "";
     }
 
-    return postProcessValue ? postProcessValue(value) : `${value}`;
-  }
-
-  millisecondsToStr(milliseconds) {
-    if (milliseconds < 0) {
-      return "";
-    }
-
-    let temp = Math.floor(milliseconds / 1000);
-
-    const years = Math.floor(temp / 31536000);
-    if (years) {
-      return years + 'y';
-    }
-
-    const days = Math.floor((temp %= 31536000) / 86400);
-    if (days) {
-      return days + 'd';
-    }
-
-    const hours = Math.floor((temp %= 86400) / 3600);
-    if (hours) {
-      return hours + 'h';
-    }
-
-    const minutes = Math.floor((temp %= 3600) / 60);
-    if (minutes) {
-      return minutes + 'min';
-    }
-
-    const seconds = temp % 60;
-    if (seconds) {
-      return seconds + 's';
-    }
-
-    return 'less than a second';
+    return (postProcessValue) ? postProcessValue(value) : `${value}`;
   }
 
   bytesToStr(size: number) {
@@ -176,13 +137,24 @@ export class RoomList extends React.Component {
     return ((size / Math.pow(1024, i)).toFixed(2) as any) * 1 + ' ' + ['B', 'kB', 'MB', 'GB', 'TB'][i];
   }
 
-  getColumnsNames(columns: any): Array<any> {
-    const data = columns.map(column => {
+  getColumnsNames(columns: any): Array<GridColDef> {
+    const data: GridColDef[] = columns.map(column => {
       const value = this.getColumnHeader(column);
-      return { id: value, field: value, headerName: value, flex: 1 }
+
+      return {
+        id: value,
+        field: value,
+        headerName: value,
+        flex: 1,
+        valueFormatter: valueFormatter[value],
+        sortComparator: sortComparator[value] || gridStringOrNumberComparator
+      } as GridColDef;
     });
+
+    //
+    // "Inspect" action column
+    //
     data.push({
-      id: "Inspect",
       field: "Inspect",
       headerName: "", // Inspect
       flex: 1,
@@ -205,8 +177,11 @@ export class RoomList extends React.Component {
           : null;
       }
     });
+
+    //
+    // "Dispose" action column
+    //
     data.push({
-      id: "Dispose",
       field: "Dispose",
       headerName: "", // Dispose
       flex: 1,
@@ -232,20 +207,8 @@ export class RoomList extends React.Component {
     return data;
   }
 
-  computeRowsData(rooms: Array<any>): Array<any> {
-    const promise_total_data = rooms.map((room) => {
-      if (this.state.find_options.room_type) {
-        if (room.name != this.state.find_options.room_type) {
-          return false;
-        }
-        if (this.state.find_options.global_id.length > 0) {
-          const its_here = this.findGlobalIdInRoom(room);
-          if(!its_here){
-            return false;
-          }
-        }
-      }
-
+  getRowsData(rooms: any): Array<any> {
+    return rooms.map(room => {
       const data = { id: room.roomId };
       for (const column of this.state.columns) {
         const value = this.getRoomColumn(room, column);
@@ -255,117 +218,29 @@ export class RoomList extends React.Component {
       data["Dispose"] = room.roomId;
       return data
     });
-    const data = promise_total_data.filter(element => element);
-    return data;
-  }
-
-  findGlobalIdInRoom(room: any): boolean {
-    const room_schema = this.state.rooms_schemas.get(room.roomId);
-    if (!room_schema) {
-      return false;
-    }
-    try {
-      if (room_schema.state.players) {
-        const data = Object.values(room_schema.state.players) as Array<any>;
-        for (const player of data) {
-          if (player.global_id == this.state.find_options.global_id) {
-            return true;
-          }
-        }
-      } else if (room_schema.state.entities) {
-        for (const entity of room_schema.state.entities) {
-          const string_keys = entity.attributes.string_keys as Array<string>;
-          const string_values = entity.attributes.string_values as Array<string>;
-          const index = string_keys.findIndex((value) => value == "global_client_id")
-          if (string_values[index] == this.state.find_options.global_id) {
-            return true;
-          }
-        };
-      }
-    } catch (err) {
-      console.error(err);
-      return true;
-    }
-    return false;
   }
 
   generateRoomListDataGrid(): JSX.Element {
-    const all_filters = this.state.rooms.map(room => room.name);
-    const available_filters = all_filters.filter((value,index) => all_filters.indexOf(value) === index);
     const columns = this.getColumnsNames(this.state.columns);
-    const rows = this.computeRowsData(this.state.rooms);
+    const rows = this.getRowsData(this.state.rooms);
 
-    return <>
-      {available_filters.length > 0 && <Card>
-        <TableContainer component={Paper}>
-          <Table aria-label="simple table">
-            <TableHead>
-              <TableRow>
-                <TableCell align="center" colSpan={2}>
-                  <Autocomplete
-                    disablePortal
-                    id="combo-box-demo"
-                    options={available_filters}
-                    onChange={(event: any, new_value: string | null) => {
-                      let global_id_value = this.state.find_options.global_id;
-                      if(new_value == null){
-                        global_id_value = "";
-                      }
-                      this.setState({
-                        find_options: {
-                          room_type: new_value,
-                          global_id: global_id_value
-                        }
-                      });
-                    }}
-                    renderInput={(params) => <TextField {...params} label="Room type" />}
-                  />
-                </TableCell>
-                <TableCell align="center" colSpan={2}>
-                  <TextField
-                    id="outlined-basic"
-                    label="Global id"
-                    variant="outlined"
-                    disabled={this.state.find_options.room_type == null}
-                    value={this.state.find_options.global_id}
-                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                      this.setState({
-                        find_options: {
-                          room_type: this.state.find_options.room_type,
-                          global_id: event.target.value
-                        }
-                      });
-                    }}
-                  />
-                </TableCell>
-              </TableRow>
-            </TableHead>
-          </Table>
-        </TableContainer>
-      </Card>
+    return <DataGrid
+      columns={columns}
+      rows={
+        (rows.length === 0)
+          ? this.getRowsData([{ roomId: NO_ACTIVE_ROOMS_ROOM_ID, elapsedTime: -1 }])
+          : rows
       }
-      <DataGrid
-        columns={columns}
-        rows={
-          (rows.length === 0)
-            ? this.computeRowsData([{ roomId: NO_ACTIVE_ROOMS_ROOM_ID, elapsedTime: -1 }])
-            : rows
-        }
-        autoHeight
-        sx={{ overflow: "hidden" }}
-        slots={{
-          noRowsOverlay: () => <></>,
-        }}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 50 } },
-        }}
-        loading={rows.length <= 0 && this.state.rooms.length > 0}
-        disableRowSelectionOnClick
-        hideFooter={rows.length === 0}
-        hideFooterPagination={rows.length === 0}
-        hideFooterSelectedRowCount={rows.length === 0}
-      />
-    </>
+      autoHeight
+      sx={{ overflow: "hidden" }}
+      slots={{
+        noRowsOverlay: () => <></>,
+      }}
+      disableRowSelectionOnClick
+      // hideFooter
+      // hideFooterPagination
+      // hideFooterSelectedRowCount
+    />
   }
 
   render() {
