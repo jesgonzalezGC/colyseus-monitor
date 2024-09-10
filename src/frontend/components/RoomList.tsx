@@ -356,11 +356,14 @@ export class RoomList extends React.Component {
         slots={{
           noRowsOverlay: () => <></>,
         }}
+        initialState={{
+          pagination: { paginationModel: { pageSize: 50 } },
+        }}
         loading={rows.length <= 0 && this.state.rooms.length > 0}
         disableRowSelectionOnClick
-        hideFooter
-        hideFooterPagination
-        hideFooterSelectedRowCount
+        hideFooter={rows.length === 0}
+        hideFooterPagination={rows.length === 0}
+        hideFooterSelectedRowCount={rows.length === 0}
       />
     </>
   }
