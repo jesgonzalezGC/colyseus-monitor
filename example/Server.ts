@@ -23,9 +23,10 @@ app.get("/hello", (req, res) => {
   res.json({hello: "world!"});
 });
 
-gameServer.define("walking_room", WalkingRoom);
-gameServer.define("party_room", WalkingRoom);
-gameServer.define("battler_room", BattlerRoom);
+gameServer.define("basic-walking-room", WalkingRoom);
+gameServer.define("party-room", WalkingRoom);
+gameServer.define("interior_tracker_room", WalkingRoom);
+gameServer.define("battler-room", BattlerRoom);
 
 app.use(express.static(__dirname));
 console.log("*********** create monitor");
